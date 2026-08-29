@@ -28,6 +28,10 @@ struct CacheStats {
         size_t total = hits + misses;
         return total == 0 ? 0.0 : static_cast<double>(hits) / static_cast<double>(total);
     }
+
+    bool operator==(const CacheStats& other) const {
+        return hits == other.hits && misses == other.misses && evictions == other.evictions;
+    }
 };
 
 /**
@@ -69,8 +73,7 @@ public:
      * @brief Explicitly removes a key-value pair from the cache.
      *
      * @param key The key to remove.
-     * @return true If the key existed and was successfully removed.
-     * @return false If the key was not found in the cache.
+     * @return bool True if the key existed and was successfully removed, false otherwise.
      */
     virtual bool remove(const Key& key) = 0;
 
