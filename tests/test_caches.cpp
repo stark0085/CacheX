@@ -298,6 +298,98 @@ TEST_CASE("LFUCache Constructor invalid capacity", "[lfu]") {
     REQUIRE_THROWS_AS(create(), std::invalid_argument);
 }
 
+TEST_CASE("LFUCache remove() recalculates min_freq_ to new minimum", "[lfu]") {
+    LFUCache<int, int> cache(3);
+    
+    // Fill cache with 3 keys at different frequencies
+    cache.put(1, 10); // f1
+    
+    cache.put(2, 20); 
+    cache.get(2); // f2
+    
+    cache.put(4, 40);
+    cache.get(4);
+    cache.get(4);
+    cache.get(4); // f4
+    
+    // State: 1@f1, 2@f2, 4@f4. min_freq_ is 1.
+    cache.remove(1); // removes the f1 key. size is 2. min_freq_ should become 2.
+    
+    // Put a new key to fill the cache. It will get f1.
+    cache.put(5, 50); 
+    // To ensure 5 isn't the one evicted (we want to test if 2 is evicted), 
+    // we must bump 5's frequency ABOVE 2.
+    cache.get(5);
+    cache.get(5);
+    cache.get(5); // 5 is now f4.
+    
+    // State: 2@f2, 4@f4, 5@f4.
+    // If min_freq_ is correctly 2, putting a new key will evict 2.
+    cache.put(6, 60); 
+    
+    REQUIRE_FALSE(cache.get(2).has_value());
+    REQUIRE(cache.get(4).has_value());
+    REQUIRE(cache.get(5).has_value());
+    REQUIRE(cache.get(6).has_value());
+}
+
+TEST_CASE("LFUCache remove() on non-minimum frequency preserves min_freq_", "[lfu]") {
+    LFUCache<int, int> cache(2);
+    
+    cache.put(1, 10); // f1
+    cache.put(3, 30);
+    cache.get(3);
+    cache.get(3); // 3 is f3
+    
+    // State: 1@f1, 3@f3. min_freq_ is 1.
+    cache.remove(3); // remove non-minimum
+    
+    // State: 1@f1.
+    // Put a new key to fill the cache
+    cache.put(4, 40); // 4@f1.
+    // Bump 4 to f2 so it isn't the minimum
+    cache.get(4); // 4@f2
+    
+    // Force eviction
+    cache.put(5, 50); // should evict 1, because min_freq_ is 1
+    
+    REQUIRE_FALSE(cache.get(1).has_value());
+    REQUIRE(cache.get(4).has_value());
+    REQUIRE(cache.get(5).has_value());
+}
+
+TEST_CASE("LFUCache repeated remove() correctly advances min_freq_", "[lfu]") {
+    LFUCache<int, int> cache(4);
+    
+    cache.put(1, 10); // f1
+    
+    cache.put(2, 20); cache.get(2); // f2
+    
+    cache.put(3, 30); cache.get(3); cache.get(3); // f3
+    
+    cache.put(4, 40); cache.get(4); cache.get(4); cache.get(4); // f4
+    
+    // State: 1@f1, 2@f2, 3@f3, 4@f4. min_freq_ = 1.
+    cache.remove(1); // min_freq_ -> 2
+    cache.remove(2); // min_freq_ -> 3
+    
+    // State: 3@f3, 4@f4.
+    // Fill the cache with two new items, and bump their frequencies to f5 so they aren't evicted.
+    cache.put(5, 50);
+    cache.get(5); cache.get(5); cache.get(5); cache.get(5); // f5
+    
+    cache.put(6, 60);
+    cache.get(6); cache.get(6); cache.get(6); cache.get(6); // f5
+    
+    // State: 3@f3, 4@f4, 5@f5, 6@f5. Cache is full.
+    // Next put should evict 3!
+    cache.put(7, 70);
+    
+    REQUIRE_FALSE(cache.get(3).has_value());
+    REQUIRE(cache.get(4).has_value());
+    REQUIRE(cache.get(7).has_value());
+}
+
 TEST_CASE("ARCCache stub test", "[arc]") {
     ARCCache<int, int> cache(10);
     REQUIRE(cache.capacity() == 10);
