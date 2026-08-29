@@ -25,7 +25,7 @@ public:
             // New key
             if (cache_map_.size() >= capacity_) {
                 // Evict least recently used (back of list)
-                auto last = cache_list_.back();
+                const auto& last = cache_list_.back();
                 cache_map_.erase(last.first);
                 cache_list_.pop_back();
                 stats_.evictions++;

@@ -146,6 +146,34 @@ TEST_CASE("LRUCache Constructor invalid capacity", "[lru]") {
     REQUIRE_THROWS_AS(create(), std::invalid_argument);
 }
 
+TEST_CASE("LRUCache Non-trivial types (std::string)", "[lru]") {
+    LRUCache<std::string, std::string> cache(2);
+    cache.put("a", "alpha");
+    cache.put("b", "beta");
+    REQUIRE(cache.get("a").value() == "alpha");
+    
+    cache.put("c", "gamma"); // evicts "b"
+    REQUIRE_FALSE(cache.get("b").has_value());
+    REQUIRE(cache.get("c").value() == "gamma");
+}
+
+TEST_CASE("LRUCache clear() resets the cache", "[lru]") {
+    LRUCache<int, int> cache(3);
+    cache.put(1, 10);
+    cache.put(2, 20);
+    
+    cache.clear();
+    REQUIRE(cache.size() == 0);
+    REQUIRE_FALSE(cache.get(1).has_value());
+    REQUIRE_FALSE(cache.get(2).has_value());
+    REQUIRE(cache.getKeysInOrder().empty());
+}
+
+TEST_CASE("LRUCache capacity() returns initial capacity", "[lru]") {
+    LRUCache<int, int> cache(42);
+    REQUIRE(cache.capacity() == 42);
+}
+
 // Stub tests for others
 TEST_CASE("LFUCache stub test", "[lfu]") {
     LFUCache<int, int> cache(10);
