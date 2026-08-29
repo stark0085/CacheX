@@ -176,9 +176,126 @@ TEST_CASE("LRUCache capacity() returns initial capacity", "[lru]") {
 }
 
 // Stub tests for others
-TEST_CASE("LFUCache stub test", "[lfu]") {
-    LFUCache<int, int> cache(10);
-    REQUIRE(cache.capacity() == 10);
+TEST_CASE("LFUCache Basic put/get correctness", "[lfu]") {
+    LFUCache<int, int> cache(2);
+    REQUIRE(cache.size() == 0);
+    
+    cache.put(1, 100);
+    REQUIRE(cache.size() == 1);
+    
+    auto val = cache.get(1);
+    REQUIRE(val.has_value());
+    REQUIRE(val.value() == 100);
+}
+
+TEST_CASE("LFUCache Eviction picks truly least-frequently-used", "[lfu]") {
+    LFUCache<int, int> cache(3);
+    cache.put(1, 10);
+    cache.put(2, 20);
+    cache.put(3, 30);
+    
+    // Frequencies: 1:2, 2:1, 3:1
+    cache.get(1);
+    
+    // Frequencies: 1:2, 2:2, 3:1
+    cache.get(2);
+    
+    // Insert 4, should evict 3 (only one with frequency 1)
+    cache.put(4, 40);
+    
+    REQUIRE_FALSE(cache.get(3).has_value());
+    REQUIRE(cache.get(4).value() == 40);
+    REQUIRE(cache.get(1).value() == 10);
+    REQUIRE(cache.get(2).value() == 20);
+}
+
+TEST_CASE("LFUCache Tie-breaking uses LRU within same frequency", "[lfu]") {
+    LFUCache<int, int> cache(3);
+    cache.put(1, 10);
+    cache.put(2, 20);
+    cache.put(3, 30);
+    
+    // Frequencies: 1:2, 2:2, 3:1
+    cache.get(1);
+    cache.get(2);
+    
+    // 3 is at frequency 1, let's bump it to 2.
+    cache.get(3);
+    // Now 1, 2, 3 are all at frequency 2.
+    // Order of most recent access: 3, 2, 1. (1 is LRU)
+    
+    // Put 4 (evicts 1)
+    cache.put(4, 40);
+    
+    REQUIRE_FALSE(cache.get(1).has_value());
+    REQUIRE(cache.get(2).has_value());
+    REQUIRE(cache.get(3).has_value());
+    REQUIRE(cache.get(4).has_value());
+}
+
+TEST_CASE("LFUCache minFrequency tracking stays correct", "[lfu]") {
+    LFUCache<int, int> cache(2);
+    cache.put(1, 10);
+    cache.put(2, 20);
+    
+    // Promote 1 and 2 to freq 2. min_freq should become 2.
+    cache.get(1);
+    cache.get(2);
+    
+    // Put 3. Evicts 1 (LRU of freq 2). 3 is at freq 1. min_freq becomes 1.
+    cache.put(3, 30);
+    REQUIRE_FALSE(cache.get(1).has_value());
+    
+    // Promote 3 to freq 2. min_freq becomes 2 again!
+    cache.get(3);
+    
+    // Put 4. Evicts 2 (LRU of freq 2). 4 is at freq 1.
+    cache.put(4, 40);
+    REQUIRE_FALSE(cache.get(2).has_value());
+    REQUIRE(cache.get(3).has_value());
+    REQUIRE(cache.get(4).has_value());
+}
+
+TEST_CASE("LFUCache Stats are accurate", "[lfu]") {
+    LFUCache<int, int> cache(2);
+    cache.put(1, 10);
+    cache.get(1); // hit
+    cache.get(2); // miss
+    cache.put(2, 20);
+    cache.put(3, 30); // evicts 2
+    
+    auto stats = cache.getStats();
+    REQUIRE(stats.hits == 1);
+    REQUIRE(stats.misses == 1);
+    REQUIRE(stats.evictions == 1);
+}
+
+TEST_CASE("LFUCache Edge case: Capacity 1", "[lfu]") {
+    LFUCache<int, int> cache(1);
+    cache.put(1, 10);
+    cache.get(1); // freq 2
+    
+    cache.put(2, 20); // Evicts 1 even though it has freq 2
+    REQUIRE_FALSE(cache.get(1).has_value());
+    REQUIRE(cache.get(2).value() == 20);
+}
+
+TEST_CASE("LFUCache put on existing key updates value and frequency", "[lfu]") {
+    LFUCache<int, int> cache(2);
+    cache.put(1, 10);
+    cache.put(2, 20);
+    
+    // Update 1. Promotes to freq 2.
+    cache.put(1, 15);
+    REQUIRE(cache.get(1).value() == 15); // Hit, promotes to freq 3
+    
+    cache.put(3, 30); // Evicts 2
+    REQUIRE_FALSE(cache.get(2).has_value());
+}
+
+TEST_CASE("LFUCache Constructor invalid capacity", "[lfu]") {
+    auto create = []() { LFUCache<int, int> cache(0); };
+    REQUIRE_THROWS_AS(create(), std::invalid_argument);
 }
 
 TEST_CASE("ARCCache stub test", "[arc]") {
