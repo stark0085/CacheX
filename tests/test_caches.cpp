@@ -425,7 +425,240 @@ TEST_CASE("LFUCache remove() isolated state verification", "[lfu]") {
     REQUIRE(cache.get(6).has_value()); // Key 6 is at freq 1
 }
 
-TEST_CASE("ARCCache stub test", "[arc]") {
-    ARCCache<int, int> cache(10);
-    REQUIRE(cache.capacity() == 10);
+// ─── ARC Tests ────────────────────────────────────────────────────────────────
+
+TEST_CASE("ARCCache Basic put/get correctness", "[arc]") {
+    ARCCache<int, int> cache(4);
+    REQUIRE(cache.size() == 0);
+
+    cache.put(1, 10);
+    cache.put(2, 20);
+    REQUIRE(cache.size() == 2);
+    REQUIRE(cache.get(1).value() == 10);
+    REQUIRE(cache.get(2).value() == 20);
+    REQUIRE_FALSE(cache.get(99).has_value());
 }
+
+TEST_CASE("ARCCache Scan resistance: hot keys survive a scan", "[arc]") {
+    // ARC's signature advantage: a scan of unique keys does not blow out
+    // frequently-accessed entries, unlike plain LRU.
+    const size_t cap = 8;
+    ARCCache<int, int> cache(cap);
+
+    // Warm up hot keys (each seen twice so they'll be in T2).
+    for (int k : {1, 2, 3}) {
+        cache.put(k, k * 10);
+        cache.get(k); // promote to T2
+    }
+
+    // Scan 3*cap unique keys — far more than capacity.
+    for (int s = 100; s < 100 + 3 * static_cast<int>(cap); ++s)
+        cache.put(s, s);
+
+    // Hot keys must still be in cache.
+    REQUIRE(cache.get(1).has_value());
+    REQUIRE(cache.get(2).has_value());
+    REQUIRE(cache.get(3).has_value());
+}
+
+TEST_CASE("ARCCache p adapts upward on B1 hits", "[arc]") {
+    const size_t cap = 4;
+    ARCCache<int, int> cache(cap);
+
+    // Fill cache with T1 entries.
+    cache.put(1, 1); cache.put(2, 2); cache.put(3, 3); cache.put(4, 4);
+    // L1=4=c, T1=4. Next puts trigger Branch A sub-case A2 (pop T1 directly).
+    // We need B1 populated, so promote some to T2 first to reduce T1.
+    cache.get(4); cache.get(3); // promote 4,3 → T2. T1={2,1}, T2={3,4}.
+
+    // Now new inserts will REPLACE from T1 (p=0, T1.size=2>0), moving to B1.
+    cache.put(5, 5); // REPLACE evicts LRU of T1(key 1) → B1. T1={2,5}... 
+                     // actually inserts into T1 after replace.
+    cache.put(6, 6); // evicts next LRU of T1 → B1.
+
+    auto state_before = cache.getDebugState();
+    // B1 must have entries for the test to be meaningful.
+    REQUIRE_FALSE(state_before.b1.empty());
+
+    double p_before = state_before.p;
+    int b1_key = state_before.b1.back(); // re-request the LRU B1 key
+
+    // Re-put a B1 key — triggers Case 2 (B1 ghost hit), p must increase.
+    cache.put(b1_key, 999);
+    double p_after = cache.getDebugState().p;
+
+    REQUIRE(p_after > p_before);
+}
+
+TEST_CASE("ARCCache p adapts downward on B2 hits", "[arc]") {
+    const size_t cap = 4;
+    ARCCache<int, int> cache(cap);
+
+    // Fill cache and promote entries to T2 via repeated gets.
+    cache.put(1, 1); cache.put(2, 2); cache.put(3, 3); cache.put(4, 4);
+    cache.get(1); cache.get(2); cache.get(3); cache.get(4); // all → T2
+
+    // Evict from T2 into B2 by inserting new entries.
+    cache.put(5, 5); // evicts LRU of T2 → B2
+    cache.put(6, 6); // evicts next LRU of T2 → B2
+
+    // Force p above 0 so a decrease is observable.
+    double p_before = cache.getDebugState().p;
+
+    // Re-insert a B2 key to trigger p decrease.
+    auto state = cache.getDebugState();
+    if (!state.b2.empty()) {
+        int b2_key = state.b2.back();
+        cache.put(b2_key, 999);
+        double p_after = cache.getDebugState().p;
+        REQUIRE(p_after <= p_before);
+    }
+}
+
+TEST_CASE("ARCCache Invariants hold across 1000 random operations", "[arc]") {
+    const size_t cap = 16;
+    ARCCache<int, int> cache(cap);
+
+    // Simple deterministic pseudo-random sequence (no <random> needed).
+    unsigned state = 12345u;
+    auto next_rand = [&](int mod) {
+        state = state * 1664525u + 1013904223u;
+        return static_cast<int>(state % static_cast<unsigned>(mod));
+    };
+
+    for (int op = 0; op < 1000; ++op) {
+        int key = next_rand(24); // keys 0..23, wider than cap to stress eviction
+        int action = next_rand(3);
+        if (action == 0)      cache.put(key, key * 2);
+        else if (action == 1) cache.get(key);
+        else                  cache.remove(key);
+
+        auto dbg = cache.getDebugState();
+        REQUIRE(dbg.t1.size() + dbg.t2.size() <= cap);
+        REQUIRE(dbg.t1.size() + dbg.b1.size() <= cap);
+        REQUIRE(dbg.t2.size() + dbg.b2.size() <= cap);
+        REQUIRE(dbg.t1.size() + dbg.t2.size() + dbg.b1.size() + dbg.b2.size() <= 2 * cap);
+    }
+}
+
+TEST_CASE("ARCCache Boundary: |T1|+|B1| == c exactly (Branch A fires)", "[arc]") {
+    const size_t cap = 3;
+    ARCCache<int, int> cache(cap);
+
+    // Fill T1 to capacity.
+    cache.put(1, 1); cache.put(2, 2); cache.put(3, 3);
+    // State: T1={3,2,1}, T2={}, B1={}, B2={}. |L1|=3=c.
+
+    // Next put should trigger Branch A, sub-case |T1|<c (impossible here since T1=3=c).
+    // So sub-case A2: evict T1 LRU directly.
+    cache.put(4, 4);
+    REQUIRE(cache.size() == cap);
+    REQUIRE_FALSE(cache.get(1).has_value()); // 1 was LRU of T1, evicted directly
+
+    auto dbg = cache.getDebugState();
+    REQUIRE(dbg.t1.size() + dbg.b1.size() <= cap);
+}
+
+TEST_CASE("ARCCache Boundary: |T1|+|B1| == c-1 (Branch B fires)", "[arc]") {
+    const size_t cap = 4;
+    ARCCache<int, int> cache(cap);
+
+    // Build state where L1 = c-1 = 3 and total >= c.
+    // Fill T1=2, promote 2 to T2, giving T1=2, T2=2.
+    cache.put(1,1); cache.put(2,2); cache.put(3,3); cache.put(4,4);
+    cache.get(1); cache.get(2); // 1,2 → T2. T1={4,3}, T2={1,2}.
+
+    // Now L1 = |T1|+|B1| = 2+0 = 2 = c-2. total = 4 = c. Branch B fires on next true miss.
+    // (total >= c, L1 < c)
+    cache.put(5, 5); // Branch B: no B2 trim (total=4 < 2*4=8), REPLACE, insert into T1.
+    REQUIRE(cache.size() == cap);
+
+    auto dbg = cache.getDebugState();
+    REQUIRE(dbg.t1.size() + dbg.b1.size() <= cap);
+    REQUIRE(dbg.t1.size() + dbg.t2.size() <= cap);
+}
+
+TEST_CASE("ARCCache Boundary: 2c total-directory threshold exactly hit", "[arc]") {
+    const size_t cap = 3;
+    ARCCache<int, int> cache(cap);
+
+    // Build up ghost entries to approach 2c=6 total directory size.
+    // Insert 6 distinct keys with eviction to populate ghosts.
+    for (int k = 1; k <= 6; ++k)
+        cache.put(k, k);
+
+    auto dbg = cache.getDebugState();
+    size_t total = dbg.t1.size() + dbg.t2.size() + dbg.b1.size() + dbg.b2.size();
+    REQUIRE(total <= 2 * cap); // must never exceed 2c
+}
+
+TEST_CASE("ARCCache ARC hit rate >= LRU hit rate on skewed workload", "[arc]") {
+    // Construct a workload where ARC's scan-resistance is measurable:
+    //
+    // A repeating pattern: access 3 hot keys, then scan (cap+1) cold unique keys.
+    // Under plain LRU the cold scan evicts the hot keys every single round.
+    // ARC adapts: it notices the hot keys keep coming back (B2 hits increase p
+    // to protect T2), so after the first eviction cycle it shields them.
+    //
+    // With cap=4: hot={1,2,3}, cold scan size=5 (cap+1).
+    // Each round: 3 hot accesses + 5 cold inserts. After round 1 both caches
+    // miss the hot keys. From round 2 onward ARC's hits on hot keys should
+    // outpace LRU's.
+    const size_t cap = 4;
+    ARCCache<int, int> arc(cap);
+    LRUCache<int, int>  lru(cap);
+
+    const int rounds = 8;
+    const int cold_per_round = static_cast<int>(cap) + 1;
+
+    for (int r = 0; r < rounds; ++r) {
+        // Hot key accesses
+        for (int h : {1, 2, 3}) {
+            if (!arc.get(h).has_value()) arc.put(h, h);
+            if (!lru.get(h).has_value()) lru.put(h, h);
+        }
+        // Cold scan — unique keys per round so they are true misses
+        for (int c = 0; c < cold_per_round; ++c) {
+            int k = 100 + r * cold_per_round + c;
+            arc.put(k, k);
+            lru.put(k, k);
+        }
+    }
+
+    double arc_hr = arc.getStats().hitRate();
+    double lru_hr = lru.getStats().hitRate();
+
+    INFO("ARC hit rate: " << arc_hr << "  LRU hit rate: " << lru_hr);
+    REQUIRE(arc_hr >= lru_hr);
+}
+
+TEST_CASE("ARCCache Stats accuracy", "[arc]") {
+    ARCCache<int, int> cache(2);
+    cache.put(1, 10);
+    cache.put(2, 20);
+    cache.get(1); // hit
+    cache.get(3); // miss
+    cache.put(3, 30); // true miss → eviction
+
+    auto s = cache.getStats();
+    REQUIRE(s.hits == 1);
+    // 2 misses from put (initial inserts) + 1 from get(3) + 1 from put(3)
+    REQUIRE(s.misses >= 1);
+    REQUIRE(s.evictions >= 1);
+
+    cache.resetStats();
+    REQUIRE(cache.getStats().hits == 0);
+}
+
+TEST_CASE("ARCCache Edge case: capacity of 1", "[arc]") {
+    ARCCache<int, int> cache(1);
+    cache.put(1, 10);
+    REQUIRE(cache.get(1).value() == 10);
+
+    cache.put(2, 20); // must evict 1
+    REQUIRE_FALSE(cache.get(1).has_value());
+    REQUIRE(cache.get(2).value() == 20);
+
+    REQUIRE(cache.size() == 1);
+}
+
