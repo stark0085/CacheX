@@ -390,6 +390,41 @@ TEST_CASE("LFUCache repeated remove() correctly advances min_freq_", "[lfu]") {
     REQUIRE(cache.get(7).has_value());
 }
 
+TEST_CASE("LFUCache remove() isolated state verification", "[lfu]") {
+    LFUCache<int, int> cache(3);
+    
+    // 1. Populate the cache with distinct frequencies: 1, 2, 4
+    cache.put(1, 10); // f1
+    cache.put(2, 20); cache.get(2); // f2
+    cache.put(4, 40); cache.get(4); cache.get(4); cache.get(4); // f4
+    
+    // 2. Remove the key at minimum frequency (freq 1)
+    cache.remove(1); // Size drops to 2. True min_freq_ becomes 2.
+    
+    // 3. Do NOT call put(). Call get() on the new correct minimum (freq 2)
+    cache.get(2); 
+    // This promotes key '2' from freq 2 to freq 3. 
+    // If remove() correctly updated min_freq_ to 2, it now naturally increments to 3.
+    // If remove() left min_freq_ stale at 1, it stays stuck at 1.
+    
+    // 4. Call get() on a couple of other existing keys
+    cache.get(4); // Promotes key '4' from freq 4 to freq 5
+    
+    // 5. Call put() with a new key to force an eviction.
+    // NOTE: Because remove() dropped the size to 2 (below capacity 3), 
+    // a single put() just fills the cache and unconditionally sets min_freq_ = 1.
+    cache.put(5, 50); // Size 3, min_freq_ = 1.
+    
+    // To actually trigger the eviction threshold, we must put() a second time.
+    cache.put(6, 60); // Evicts from min_freq_ (which is 1).
+    
+    // Assert the evicted key is correct (key 5, which was at freq 1).
+    REQUIRE_FALSE(cache.get(5).has_value());
+    REQUIRE(cache.get(2).has_value()); // Key 2 is safe at freq 3
+    REQUIRE(cache.get(4).has_value()); // Key 4 is safe at freq 5
+    REQUIRE(cache.get(6).has_value()); // Key 6 is at freq 1
+}
+
 TEST_CASE("ARCCache stub test", "[arc]") {
     ARCCache<int, int> cache(10);
     REQUIRE(cache.capacity() == 10);
