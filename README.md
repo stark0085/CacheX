@@ -1,6 +1,6 @@
 # Cachex
 
-Cachex is a multi-policy cache engine supporting LRU, LFU, and ARC (Adaptive Replacement Cache) eviction policies. This is a header-only template library designed to be embedded easily into other C++ projects.
+Cachex is a dual-policy cache engine supporting LRU and LFU eviction policies. This is a header-only template library designed to be embedded easily into other C++ projects.
 
 ## Building and Running Tests
 

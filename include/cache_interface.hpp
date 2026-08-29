@@ -8,8 +8,7 @@
  */
 enum class EvictionPolicy {
     LRU,
-    LFU,
-    ARC
+    LFU
 };
 
 /**

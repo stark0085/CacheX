@@ -3,8 +3,9 @@
 
 #include "../include/lru_cache.hpp"
 #include "../include/lfu_cache.hpp"
-#include "../include/arc_cache.hpp"
 #include <vector>
+#include <random>
+#include <algorithm>
 
 TEST_CASE("LRUCache Basic put/get correctness", "[lru]") {
     LRUCache<int, int> cache(2);
@@ -425,7 +426,229 @@ TEST_CASE("LFUCache remove() isolated state verification", "[lfu]") {
     REQUIRE(cache.get(6).has_value()); // Key 6 is at freq 1
 }
 
-TEST_CASE("ARCCache stub test", "[arc]") {
-    ARCCache<int, int> cache(10);
-    REQUIRE(cache.capacity() == 10);
+TEST_CASE("LFUCache Non-trivial types (std::string)", "[lfu]") {
+    LFUCache<std::string, std::string> cache(2);
+    cache.put("a", "alpha");
+    cache.put("b", "beta");
+    REQUIRE(cache.get("a").value() == "alpha");
+    
+    cache.put("c", "gamma"); // evicts "b" (LRU of freq 1)
+    REQUIRE_FALSE(cache.get("b").has_value());
+    REQUIRE(cache.get("c").value() == "gamma");
 }
+
+TEST_CASE("LFUCache Repeated fill-and-refill eviction scenarios", "[lfu]") {
+    LFUCache<int, int> cache(3);
+    
+    // Fill cache
+    cache.put(1, 10);
+    cache.put(2, 20);
+    cache.put(3, 30);
+    REQUIRE(cache.size() == 3);
+    
+    // Refill cycle 1
+    cache.put(4, 40);
+    cache.put(5, 50);
+    cache.put(6, 60);
+    REQUIRE(cache.size() == 3);
+    
+    // Refill cycle 2
+    cache.put(7, 70);
+    cache.put(8, 80);
+    cache.put(9, 90);
+    REQUIRE(cache.size() == 3);
+    
+    // All old keys should be evicted
+    REQUIRE_FALSE(cache.get(1).has_value());
+    REQUIRE_FALSE(cache.get(2).has_value());
+    REQUIRE_FALSE(cache.get(3).has_value());
+}
+
+TEST_CASE("LFUCache Multiple puts of same key without intervening gets", "[lfu]") {
+    LFUCache<int, int> cache(2);
+    
+    // Trace: put() on an existing key calls promote(), incrementing frequency by 1 each time.
+    cache.put(1, 10);     // Initial insert: freq = 1, min_freq = 1
+    cache.put(1, 15);     // Key exists, promote() called: freq 1 → 2
+    cache.put(1, 20);     // Key exists, promote() called: freq 2 → 3
+    cache.put(1, 25);     // Key exists, promote() called: freq 3 → 4
+    cache.put(1, 30);     // Key exists, promote() called: freq 4 → 5
+    
+    REQUIRE(cache.size() == 1);
+    auto val = cache.get(1);  // get() on existing key calls promote(): freq 5 → 6
+    REQUIRE(val.value() == 30);
+    
+    // Key 1 should be at frequency 6 after 5 puts (each promoting +1) + 1 get (+1)
+    auto freq_info = cache.getKeysWithFrequency();
+    REQUIRE(freq_info.size() == 1);
+    REQUIRE(freq_info[0].second == 6);
+}
+
+TEST_CASE("LRUCache Repeated fill-and-refill eviction scenarios", "[lru]") {
+    LRUCache<int, int> cache(3);
+    
+    // Fill cache
+    cache.put(1, 10);
+    cache.put(2, 20);
+    cache.put(3, 30);
+    REQUIRE(cache.size() == 3);
+    
+    // Refill cycle 1
+    cache.put(4, 40);
+    cache.put(5, 50);
+    cache.put(6, 60);
+    REQUIRE(cache.size() == 3);
+    
+    // Refill cycle 2
+    cache.put(7, 70);
+    cache.put(8, 80);
+    cache.put(9, 90);
+    REQUIRE(cache.size() == 3);
+    
+    // All old keys should be evicted
+    REQUIRE_FALSE(cache.get(1).has_value());
+    REQUIRE_FALSE(cache.get(2).has_value());
+    REQUIRE_FALSE(cache.get(3).has_value());
+}
+
+TEST_CASE("LRUCache Multiple puts of same key without intervening gets", "[lru]") {
+    LRUCache<int, int> cache(2);
+    
+    // Put same key 5 times
+    cache.put(1, 10);
+    cache.put(1, 15);
+    cache.put(1, 20);
+    cache.put(1, 25);
+    cache.put(1, 30);
+    
+    REQUIRE(cache.size() == 1);
+    REQUIRE(cache.get(1).value() == 30);
+    REQUIRE(cache.size() == 1);
+}
+
+TEST_CASE("LRUCache Larger capacity with randomized access and real eviction", "[lru]") {
+    LRUCache<int, int> cache(100);
+    
+    // Insert 400 unique keys into capacity-100 cache to force heavy eviction
+    std::mt19937 rng(12345);  // Fixed seed for reproducibility
+    std::uniform_int_distribution<int> key_dist(0, 399);
+    std::uniform_int_distribution<int> op_dist(0, 9);
+    
+    // 500 randomized operations: ~70% gets, ~30% puts
+    for (int i = 0; i < 500; i++) {
+        int random_key = key_dist(rng);
+        int op_type = op_dist(rng);
+        
+        if (op_type < 7) {
+            // 70% chance: get operation
+            cache.get(random_key);
+        } else {
+            // 30% chance: put operation
+            cache.put(random_key, random_key * 10);
+        }
+        
+        // Assert cache never exceeds capacity
+        REQUIRE(cache.size() <= cache.capacity());
+    }
+    
+    // Verify eviction actually happened
+    auto stats = cache.getStats();
+    REQUIRE(stats.evictions > 0);  // Should have evicted many times (400 keys into capacity 100)
+    
+    // Verify capacity never exceeded during entire test
+    REQUIRE(cache.size() <= 100);
+    
+    // Now prove recency protection: add specific keys and access them repeatedly
+    std::vector<int> protect_keys = {100, 101, 102};
+    for (int key : protect_keys) {
+        cache.put(key, key * 10);
+    }
+    
+    // Access these keys repeatedly to make them MRU
+    for (int key : protect_keys) {
+        for (int j = 0; j < 10; j++) {
+            auto val = cache.get(key);
+            REQUIRE(val.has_value());
+        }
+    }
+    
+    // These recently-accessed keys must still be in the cache
+    for (int key : protect_keys) {
+        REQUIRE(cache.get(key).has_value());
+    }
+}
+
+TEST_CASE("LFUCache Larger capacity with randomized access and real eviction", "[lfu]") {
+    LFUCache<int, int> cache(100);
+    
+    // Insert 400 unique keys into capacity-100 cache to force heavy eviction
+    std::mt19937 rng(12345);  // Fixed seed for reproducibility
+    std::uniform_int_distribution<int> key_dist(0, 399);
+    std::uniform_int_distribution<int> op_dist(0, 9);
+    
+    std::vector<int> accessed_keys;
+    
+    // 500 randomized operations: ~70% gets, ~30% puts
+    for (int i = 0; i < 500; i++) {
+        int random_key = key_dist(rng);
+        int op_type = op_dist(rng);
+        
+        if (op_type < 7) {
+            // 70% chance: get operation
+            auto val = cache.get(random_key);
+            if (val.has_value()) {
+                accessed_keys.push_back(random_key);
+            }
+        } else {
+            // 30% chance: put operation
+            cache.put(random_key, random_key * 10);
+        }
+        
+        // Assert cache never exceeds capacity
+        REQUIRE(cache.size() <= cache.capacity());
+    }
+    
+    // Verify eviction actually happened
+    auto stats = cache.getStats();
+    REQUIRE(stats.evictions > 0);  // Should have evicted many times (400 keys into capacity 100)
+    
+    // Verify capacity never exceeded during entire test
+    REQUIRE(cache.size() <= 100);
+    
+    // Now prove frequency protection: access specific keys repeatedly and verify retention
+    if (accessed_keys.size() >= 3) {
+        std::vector<int> frequent_keys = {accessed_keys[0], accessed_keys[1], accessed_keys[2]};
+        for (int key : frequent_keys) {
+            for (int j = 0; j < 5; j++) {
+                cache.get(key);
+            }
+        }
+        
+        // These frequently-accessed keys should be in the cache
+        for (int key : frequent_keys) {
+            REQUIRE(cache.get(key).has_value());
+        }
+        
+        // Verify that frequently-accessed keys have higher frequency than average
+        auto freq_data = cache.getKeysWithFrequency();
+        REQUIRE(freq_data.size() > 0);
+        
+        // Calculate average frequency
+        double avg_freq = 0.0;
+        for (const auto& [key, freq] : freq_data) {
+            avg_freq += freq;
+        }
+        avg_freq /= freq_data.size();
+        
+        // Frequently-accessed keys should have above-average frequency
+        for (int key : frequent_keys) {
+            auto it = std::find_if(freq_data.begin(), freq_data.end(),
+                                  [key](const auto& p) { return p.first == key; });
+            if (it != freq_data.end()) {
+                REQUIRE(it->second > avg_freq);
+            }
+        }
+    }
+}
+
+
