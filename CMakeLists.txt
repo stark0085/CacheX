@@ -43,3 +43,22 @@ target_link_libraries(test_caches PRIVATE Catch2::Catch2WithMain)
 
 include(Catch)
 catch_discover_tests(test_caches)
+
+# Server executable
+add_executable(cachex_server src/server_main.cpp)
+target_include_directories(cachex_server PRIVATE include)
+target_link_libraries(cachex_server PRIVATE ixwebsocket)
+
+# Fetch IXWebSocket for the WebSocket server layer
+FetchContent_Declare(
+  ixwebsocket
+  GIT_REPOSITORY https://github.com/machinezone/IXWebSocket.git
+  GIT_TAG        v11.4.5
+)
+set(USE_TLS OFF CACHE BOOL "" FORCE)   # we don't need SSL for a local dev server
+FetchContent_MakeAvailable(ixwebsocket)
+
+# WebSocket server executable (separate binary, separate port)
+add_executable(cachex_ws_server src/ws_server_main.cpp)
+target_include_directories(cachex_ws_server PRIVATE include)
+target_link_libraries(cachex_ws_server PRIVATE ixwebsocket)

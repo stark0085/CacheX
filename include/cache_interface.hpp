@@ -6,7 +6,8 @@
 /**
  * @brief Represents the available eviction policies for the cache engine.
  */
-enum class EvictionPolicy {
+enum class EvictionPolicy
+{
     LRU,
     LFU
 };
@@ -14,7 +15,8 @@ enum class EvictionPolicy {
 /**
  * @brief Statistics structure for cache performance metrics.
  */
-struct CacheStats {
+struct CacheStats
+{
     size_t hits = 0;
     size_t misses = 0;
     size_t evictions = 0;
@@ -23,12 +25,14 @@ struct CacheStats {
      * @brief Computes the hit rate of the cache.
      * @return The ratio of hits to total lookups (hits + misses). Returns 0.0 if no lookups have occurred.
      */
-    double hitRate() const {
+    double hitRate() const
+    {
         size_t total = hits + misses;
         return total == 0 ? 0.0 : static_cast<double>(hits) / static_cast<double>(total);
     }
 
-    bool operator==(const CacheStats& other) const {
+    bool operator==(const CacheStats &other) const
+    {
         return hits == other.hits && misses == other.misses && evictions == other.evictions;
     }
 };
@@ -40,13 +44,14 @@ struct CacheStats {
  * @tparam Value Type of the values stored in the cache.
  */
 template <typename Key, typename Value>
-class ICache {
+class ICache
+{
 public:
     virtual ~ICache() = default;
 
     /**
      * @brief Inserts or updates a key-value pair in the cache.
-     * 
+     *
      * If the cache is at capacity and a new key is inserted, an existing entry
      * will be evicted according to the cache's policy.
      *
@@ -54,19 +59,34 @@ public:
      * @param value The value associated with the key.
      * @return true Always returns true (reserved for future error handling).
      */
-    virtual bool put(const Key& key, const Value& value) = 0;
+
+    /**
+     * @brief Inserts or updates a key-value pair in the cache.
+     *
+     * If the cache is at capacity and a new key is inserted, an existing entry
+     * will be evicted according to the cache's policy.
+     *
+     * @param key The key to insert or update.
+     * @param value The value associated with the key.
+     * @param evictedKey Optional out-parameter. If non-null and an eviction
+     *                    occurs during this call, the evicted key is written
+     *                    here. Left untouched if no eviction occurs. Defaults
+     *                    to nullptr for callers that don't care.
+     * @return true Always returns true (reserved for future error handling).
+     */
+    virtual bool put(const Key &key, const Value &value, Key *evictedKey = nullptr) = 0;
 
     /**
      * @brief Retrieves a value from the cache.
-     * 
-     * If the key is present, returns the value and updates the internal 
-     * recency/frequency metadata according to the cache policy. 
+     *
+     * If the key is present, returns the value and updates the internal
+     * recency/frequency metadata according to the cache policy.
      * If the key is absent, returns std::nullopt.
      *
      * @param key The key to look up.
      * @return std::optional<Value> The value if found, or std::nullopt if absent.
      */
-    virtual std::optional<Value> get(const Key& key) = 0;
+    virtual std::optional<Value> get(const Key &key) = 0;
 
     /**
      * @brief Explicitly removes a key-value pair from the cache.
@@ -74,7 +94,7 @@ public:
      * @param key The key to remove.
      * @return bool True if the key existed and was successfully removed, false otherwise.
      */
-    virtual bool remove(const Key& key) = 0;
+    virtual bool remove(const Key &key) = 0;
 
     /**
      * @brief Clears all entries from the cache.

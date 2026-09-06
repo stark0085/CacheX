@@ -15,7 +15,7 @@ public:
         }
     }
 
-    bool put(const Key& key, const Value& value) override {
+    bool put(const Key& key, const Value& value, Key* evictedKey = nullptr) override {
         auto it = cache_map_.find(key);
         if (it != cache_map_.end()) {
             // Key already exists, update value and move to front
@@ -26,6 +26,9 @@ public:
             if (cache_map_.size() >= capacity_) {
                 // Evict least recently used (back of list)
                 const auto& last = cache_list_.back();
+                if (evictedKey) {
+                    *evictedKey = last.first;
+                }
                 cache_map_.erase(last.first);
                 cache_list_.pop_back();
                 stats_.evictions++;

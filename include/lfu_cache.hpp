@@ -19,7 +19,6 @@ private:
     size_t capacity_;
     CacheStats stats_;
     size_t min_freq_;
-    
     std::unordered_map<Key, Node> cache_map_;
     std::unordered_map<size_t, std::list<Key>> freq_list_map_;
 
@@ -32,7 +31,6 @@ private:
                 min_freq_++;
             }
         }
-        
         node.freq = freq + 1;
         freq_list_map_[node.freq].push_front(key);
         node.it = freq_list_map_[node.freq].begin();
@@ -45,7 +43,7 @@ public:
         }
     }
 
-    bool put(const Key& key, const Value& value) override {
+    bool put(const Key& key, const Value& value, Key* evictedKey = nullptr) override {
         auto it = cache_map_.find(key);
         if (it != cache_map_.end()) {
             it->second.value = value;
@@ -56,6 +54,9 @@ public:
         if (cache_map_.size() >= capacity_) {
             auto& min_list = freq_list_map_[min_freq_];
             const Key& evict_key = min_list.back();
+            if (evictedKey) {
+                *evictedKey = evict_key;
+            }
             cache_map_.erase(evict_key);
             min_list.pop_back();
             if (min_list.empty()) {
@@ -67,7 +68,6 @@ public:
         min_freq_ = 1;
         freq_list_map_[1].push_front(key);
         cache_map_[key] = {value, 1, freq_list_map_[1].begin()};
-        
         return true;
     }
 
@@ -78,7 +78,6 @@ public:
             promote(key, it->second);
             return it->second.value;
         }
-        
         stats_.misses++;
         return std::nullopt;
     }
@@ -94,8 +93,6 @@ public:
         if (freq_list_map_[freq].empty()) {
             freq_list_map_.erase(freq);
             if (min_freq_ == freq && cache_map_.size() > 1) {
-                // Find new min_freq_ by scanning existing frequencies
-                // O(unique_frequencies) which is bounded by capacity
                 min_freq_ = std::numeric_limits<size_t>::max();
                 for (const auto& pair : freq_list_map_) {
                     if (pair.first < min_freq_) {
@@ -106,7 +103,6 @@ public:
                 min_freq_ = 0;
             }
         }
-        
         cache_map_.erase(it);
         return true;
     }
