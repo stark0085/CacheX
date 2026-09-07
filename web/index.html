@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cachex — Live Cache Visualizer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <header>
+        <div class="brand">
+            <h1>CACHEX</h1>
+            <span class="tag mono">live cache visualizer</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:20px;">
+            <div class="status">
+                <div class="dot off" id="wsDot"></div>
+                <span id="wsStatus">disconnected</span>
+            </div>
+            <div class="policy-toggle">
+                <button id="btnLRU" class="active">LRU</button>
+                <button id="btnLFU">LFU</button>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <section>
+            <p class="section-label">CACHE STATE</p>
+            <div class="cache-grid" id="cacheGrid">
+                <div class="empty-note">no keys yet — put one below</div>
+            </div>
+        </section>
+
+        <section>
+            <p class="section-label">STATS</p>
+            <div class="stat-row hero">
+                <span class="label">hit rate</span>
+                <span class="value" id="statHitRate">0.0%</span>
+            </div>
+            <div class="stat-row">
+                <span class="label">hits</span>
+                <span class="value" id="statHits">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="label">misses</span>
+                <span class="value" id="statMisses">0</span>
+            </div>
+            <div class="stat-row">
+                <span class="label">evictions</span>
+                <span class="value" id="statEvictions">0</span>
+            </div>
+
+            <div class="controls">
+                <p class="section-label">CONTROLS</p>
+                <div class="field">
+                    <input type="text" id="keyInput" placeholder="key" />
+                    <input type="text" id="valueInput" placeholder="value" />
+                    <input type="text" id="ttlInput" placeholder="ttl (s)" style="max-width: 90px;" />
+                </div>
+                <div class="btn-row">
+                    <button class="action primary" id="btnPut">PUT</button>
+                    <button class="action" id="btnGet">GET</button>
+                    <button class="action" id="btnDel">DELETE</button>
+                    <button class="action" id="btnFill">FILL RANDOM ×20</button>
+                    <button class="action" id="btnClearCache">CLEAR CACHE</button>
+                    <button class="action" id="btnClear">CLEAR LOG</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div class="log" id="log">
+        <div class="log-empty">waiting for events…</div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
