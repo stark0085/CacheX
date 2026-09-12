@@ -126,4 +126,8 @@ public:
      * @brief Resets the cache statistics (hits, misses, evictions) to zero.
      */
     virtual void resetStats() = 0;
+
+    virtual std::vector<std::pair<Key, Value>> getAllEntries() const = 0;
+
+    virtual void setStats(const CacheStats &stats) = 0;
 };

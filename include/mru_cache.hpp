@@ -6,11 +6,24 @@
 #include <stdexcept>
 #include <vector>
 
+/**
+ * @brief Most-Recently-Used cache. Evicts the MOST recently accessed/inserted
+ * key when full — the opposite of LRU's eviction target.
+ *
+ * Structurally identical to LRUCache (same MRU-at-front ordering, same
+ * splice-on-access recency tracking) EXCEPT eviction pops from the FRONT
+ * (most recent) instead of the BACK (least recent).
+ *
+ * Useful for workloads where recently-touched data is unlikely to be
+ * needed again soon (e.g. a single sequential scan over a working set
+ * larger than the cache) — NOT for typical "hot key" workloads like
+ * Zipfian traffic, where MRU will perform poorly by design.
+ */
 template <typename Key, typename Value>
-class LRUCache : public ICache<Key, Value>
+class MRUCache : public ICache<Key, Value>
 {
 public:
-    explicit LRUCache(size_t capacity) : capacity_(capacity)
+    explicit MRUCache(size_t capacity) : capacity_(capacity)
     {
         if (capacity == 0)
         {
@@ -23,26 +36,25 @@ public:
         auto it = cache_map_.find(key);
         if (it != cache_map_.end())
         {
-            // Key already exists, update value and move to front
             it->second->second = value;
             cache_list_.splice(cache_list_.begin(), cache_list_, it->second);
         }
         else
         {
-            // New key
             if (cache_map_.size() >= capacity_)
             {
-                // Evict least recently used (back of list)
-                const auto &last = cache_list_.back();
+                // Evict MOST recently used — front of the list.
+                // This is the one line that differs from LRUCache::put(),
+                // which evicts cache_list_.back() instead.
+                const auto &mostRecent = cache_list_.front();
                 if (evictedKey)
                 {
-                    *evictedKey = last.first;
+                    *evictedKey = mostRecent.first;
                 }
-                cache_map_.erase(last.first);
-                cache_list_.pop_back();
+                cache_map_.erase(mostRecent.first);
+                cache_list_.pop_front();
                 stats_.evictions++;
             }
-            // Insert new entry at the front
             cache_list_.emplace_front(key, value);
             cache_map_[key] = cache_list_.begin();
         }
@@ -55,7 +67,9 @@ public:
         if (it != cache_map_.end())
         {
             stats_.hits++;
-            // Move accessed item to the front
+            // Move accessed item to the front (MRU position) — same
+            // recency-tracking as LRU. The difference is purely which
+            // end gets evicted, not how recency is tracked.
             cache_list_.splice(cache_list_.begin(), cache_list_, it->second);
             return it->second->second;
         }
@@ -104,6 +118,12 @@ public:
         stats_ = CacheStats{};
     }
 
+    /**
+     * @brief Returns keys most-recently-used first (i.e. the NEXT eviction
+     * target is at index 0 — the opposite convention from LRUCache's
+     * getKeysInOrder, where index 0 is also MRU but eviction targets the
+     * OTHER end of this same vector).
+     */
     std::vector<Key> getKeysInOrder() const
     {
         std::vector<Key> keys;

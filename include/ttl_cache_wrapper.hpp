@@ -144,6 +144,20 @@ public:
         inner_cache_->resetStats();
     }
 
+    std::vector<std::pair<Key, Value>> getAllEntries() const override
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        // Note: does not filter out entries that are logically expired
+        // but not yet swept — same honest limitation as size().
+        return inner_cache_->getAllEntries();
+    }
+
+    void setStats(const CacheStats &stats) override
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        inner_cache_->setStats(stats);
+    }
+
 private:
     // Caller must already hold mutex_. Returns true if the key was
     // expired (and has now been removed from both maps).

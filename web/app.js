@@ -61,6 +61,8 @@ function setPolicyUI(policy) {
   currentPolicy = policy;
   el('btnLRU').classList.toggle('active', policy === 'LRU');
   el('btnLFU').classList.toggle('active', policy === 'LFU');
+  el('btnFIFO').classList.toggle('active', policy === 'FIFO');
+  el('btnMRU').classList.toggle('active', policy === 'MRU');
 }
 
 async function refreshStats() {
@@ -185,10 +187,31 @@ async function doClearCache() {
 
 async function switchPolicy(policy) {
   await fetch(`${REST_BASE}/policy`, { method: 'POST', body: policy });
-  knownKeys.clear();
-  renderGrid();
   setPolicyUI(policy);
+  await resyncGridFromServer();
   refreshStats();
+}
+
+// Re-fetches the actual current cache contents from the server and rebuilds
+// the local grid to match — needed because policy switches now MIGRATE data
+// server-side (matching Redis's CONFIG SET behavior) rather than wiping it,
+// so the client's local knownKeys mirror needs to be refreshed from truth
+// rather than assumed empty.
+async function resyncGridFromServer() {
+  try {
+    const res = await fetch(`${REST_BASE}/cache-keys`);
+    const keys = await res.json();
+    knownKeys.clear();
+    for (const key of keys) {
+      knownKeys.set(key, { freq: null });
+    }
+    renderGrid();
+  } catch (e) {
+    // If this endpoint isn't reachable, fall back to an empty view rather
+    // than showing stale/incorrect data.
+    knownKeys.clear();
+    renderGrid();
+  }
 }
 
 el('btnPut').addEventListener('click', doPut);
@@ -199,6 +222,8 @@ el('btnClear').addEventListener('click', () => { logEl.innerHTML = '<div class="
 el('btnClearCache').addEventListener('click', doClearCache);
 el('btnLRU').addEventListener('click', () => switchPolicy('LRU'));
 el('btnLFU').addEventListener('click', () => switchPolicy('LFU'));
+el('btnFIFO').addEventListener('click', () => switchPolicy('FIFO'));
+el('btnMRU').addEventListener('click', () => switchPolicy('MRU'));
 
 el('keyInput').addEventListener('keydown', e => { if (e.key === 'Enter') doPut(); });
 

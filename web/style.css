@@ -16,12 +16,16 @@
   --evict: #C57C6C;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
-html, body {
+html,
+body {
   margin: 0;
   height: 100vh;
-  overflow: hidden; /* the page itself never scrolls; internal regions do */
+  overflow: hidden;
+  /* the page itself never scrolls; internal regions do */
 }
 
 body {
@@ -34,7 +38,9 @@ body {
   flex-direction: column;
 }
 
-.mono { font-family: 'JetBrains Mono', monospace; }
+.mono {
+  font-family: 'JetBrains Mono', monospace;
+}
 
 /* ---------- Header ---------- */
 header {
@@ -43,7 +49,8 @@ header {
   justify-content: space-between;
   padding: 20px 28px;
   border-bottom: 1px solid var(--border);
-  flex-shrink: 0; /* header keeps its natural height, never compressed */
+  flex-shrink: 0;
+  /* header keeps its natural height, never compressed */
 }
 
 .brand {
@@ -79,8 +86,14 @@ header {
   background: var(--text-faint);
   transition: background 0.2s ease;
 }
-.dot.on { background: var(--hit); }
-.dot.off { background: var(--miss); }
+
+.dot.on {
+  background: var(--hit);
+}
+
+.dot.off {
+  background: var(--miss);
+}
 
 .policy-toggle {
   display: flex;
@@ -98,7 +111,7 @@ header {
   transition: color 0.15s ease, background 0.15s ease;
 }
 
-.policy-toggle button:first-child {
+.policy-toggle button:not(:last-child) {
   border-right: 1px solid var(--border);
 }
 
@@ -118,19 +131,24 @@ main {
   grid-template-columns: 1.4fr 0.9fr;
   gap: 1px;
   background: var(--border);
-  flex: 1; /* takes remaining space between header and log */
-  min-height: 0; /* critical: without this, grid children can't shrink below content size */
+  flex: 1;
+  /* takes remaining space between header and log */
+  min-height: 0;
+  /* critical: without this, grid children can't shrink below content size */
   overflow: hidden;
 }
 
 @media (max-width: 860px) {
-  main { grid-template-columns: 1fr; }
+  main {
+    grid-template-columns: 1fr;
+  }
 }
 
 section {
   background: var(--bg);
   padding: 24px 28px;
-  overflow-y: auto; /* each panel scrolls independently if its content overflows */
+  overflow-y: auto;
+  /* each panel scrolls independently if its content overflows */
   min-height: 0;
 }
 
@@ -179,9 +197,20 @@ section {
   margin-top: 3px;
 }
 
-.slot.flash-hit   { border-color: var(--hit); background: #182019; }
-.slot.flash-miss  { border-color: var(--miss); background: #201615; }
-.slot.flash-evict { border-color: var(--evict); opacity: 0.25; }
+.slot.flash-hit {
+  border-color: var(--hit);
+  background: #182019;
+}
+
+.slot.flash-miss {
+  border-color: var(--miss);
+  background: #201615;
+}
+
+.slot.flash-evict {
+  border-color: var(--evict);
+  opacity: 0.25;
+}
 
 .empty-note {
   color: var(--text-faint);
@@ -199,13 +228,21 @@ section {
   padding: 10px 0;
   border-bottom: 1px solid var(--border-soft);
 }
-.stat-row:last-child { border-bottom: none; }
 
-.stat-row .label { color: var(--text-muted); font-size: 13px; }
+.stat-row:last-child {
+  border-bottom: none;
+}
+
+.stat-row .label {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 .stat-row .value {
   font-family: 'JetBrains Mono', monospace;
   font-size: 15px;
 }
+
 .stat-row.hero .value {
   font-size: 26px;
   color: var(--accent);
@@ -213,7 +250,9 @@ section {
 }
 
 /* ---------- Controls ---------- */
-.controls { margin-top: 28px; }
+.controls {
+  margin-top: 28px;
+}
 
 .field {
   display: flex;
@@ -231,10 +270,20 @@ input[type="text"] {
   padding: 9px 12px;
   outline: none;
 }
-input[type="text"]:focus { border-color: var(--accent-dim); }
-input[type="text"]::placeholder { color: var(--text-faint); }
 
-.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+input[type="text"]:focus {
+  border-color: var(--accent-dim);
+}
+
+input[type="text"]::placeholder {
+  color: var(--text-faint);
+}
+
+.btn-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 
 button.action {
   background: var(--surface);
@@ -247,14 +296,26 @@ button.action {
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease;
 }
-button.action:hover { border-color: var(--accent-dim); color: var(--accent); }
-button.action:active { transform: translateY(1px); }
-button.action.primary { border-color: var(--accent-dim); color: var(--accent); }
+
+button.action:hover {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+button.action:active {
+  transform: translateY(1px);
+}
+
+button.action.primary {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
 
 .log {
   border-top: 1px solid var(--border);
   padding: 18px 28px;
-  height: 220px; /* fixed height, not max-height, so it's guaranteed constrained */
+  height: 220px;
+  /* fixed height, not max-height, so it's guaranteed constrained */
   overflow-y: auto;
   flex-shrink: 0;
 }
@@ -269,15 +330,38 @@ button.action.primary { border-color: var(--accent-dim); color: var(--accent); }
   color: var(--text-muted);
   border-bottom: 1px solid var(--border-soft);
 }
-.log-row:last-child { border-bottom: none; }
 
-.log-row .type-hit { color: var(--hit); }
-.log-row .type-miss { color: var(--miss); }
-.log-row .type-eviction { color: var(--evict); }
-.log-row .type-set { color: var(--text-muted); }
-.log-row .type-remove { color: var(--text-faint); }
-.log-row .type-policy_change { color: var(--accent); }
-.log-row .type-expired { color: var(--evict); }
+.log-row:last-child {
+  border-bottom: none;
+}
+
+.log-row .type-hit {
+  color: var(--hit);
+}
+
+.log-row .type-miss {
+  color: var(--miss);
+}
+
+.log-row .type-eviction {
+  color: var(--evict);
+}
+
+.log-row .type-set {
+  color: var(--text-muted);
+}
+
+.log-row .type-remove {
+  color: var(--text-faint);
+}
+
+.log-row .type-policy_change {
+  color: var(--accent);
+}
+
+.log-row .type-expired {
+  color: var(--evict);
+}
 
 .log-empty {
   color: var(--text-faint);
@@ -286,6 +370,14 @@ button.action.primary { border-color: var(--accent-dim); color: var(--accent); }
   text-align: center;
 }
 
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--border); }
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+}

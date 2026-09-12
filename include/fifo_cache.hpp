@@ -6,11 +6,18 @@
 #include <stdexcept>
 #include <vector>
 
+/**
+ * @brief First-In-First-Out cache. Evicts the OLDEST inserted key when full,
+ * regardless of how recently or frequently it was accessed.
+ *
+ * Unlike LRU, get() does NOT reorder the list — only insertion order matters.
+ * This is the single structural difference from LRUCache.
+ */
 template <typename Key, typename Value>
-class LRUCache : public ICache<Key, Value>
+class FIFOCache : public ICache<Key, Value>
 {
 public:
-    explicit LRUCache(size_t capacity) : capacity_(capacity)
+    explicit FIFOCache(size_t capacity) : capacity_(capacity)
     {
         if (capacity == 0)
         {
@@ -23,28 +30,31 @@ public:
         auto it = cache_map_.find(key);
         if (it != cache_map_.end())
         {
-            // Key already exists, update value and move to front
+            // Key already exists: update value ONLY. Do NOT move it in the
+            // list — insertion order is fixed at first-insert time in FIFO,
+            // unlike LRU where an update also refreshes recency.
             it->second->second = value;
-            cache_list_.splice(cache_list_.begin(), cache_list_, it->second);
         }
         else
         {
-            // New key
             if (cache_map_.size() >= capacity_)
             {
-                // Evict least recently used (back of list)
-                const auto &last = cache_list_.back();
+                // Evict the oldest entry (front of the list, since we
+                // push new entries to the back — see insertion below).
+                const auto &oldest = cache_list_.front();
                 if (evictedKey)
                 {
-                    *evictedKey = last.first;
+                    *evictedKey = oldest.first;
                 }
-                cache_map_.erase(last.first);
-                cache_list_.pop_back();
+                cache_map_.erase(oldest.first);
+                cache_list_.pop_front();
                 stats_.evictions++;
             }
-            // Insert new entry at the front
-            cache_list_.emplace_front(key, value);
-            cache_map_[key] = cache_list_.begin();
+            // New entries go to the BACK; oldest sits at the FRONT.
+            cache_list_.emplace_back(key, value);
+            auto lastIt = cache_list_.end();
+            --lastIt;
+            cache_map_[key] = lastIt;
         }
         return true;
     }
@@ -55,8 +65,7 @@ public:
         if (it != cache_map_.end())
         {
             stats_.hits++;
-            // Move accessed item to the front
-            cache_list_.splice(cache_list_.begin(), cache_list_, it->second);
+            // No reordering — this is what makes it FIFO, not LRU.
             return it->second->second;
         }
         else
@@ -104,6 +113,9 @@ public:
         stats_ = CacheStats{};
     }
 
+    /**
+     * @brief Returns keys in insertion order: oldest first, newest last.
+     */
     std::vector<Key> getKeysInOrder() const
     {
         std::vector<Key> keys;
