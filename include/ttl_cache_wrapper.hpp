@@ -95,12 +95,7 @@ public:
     std::optional<Value> get(const Key &key) override
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (removeIfExpired(key))
-        {
-            return std::nullopt; // treat as a miss; don't touch inner_cache_
-                                 // at all so we don't pollute its recency/
-                                 // frequency bookkeeping with a dead key.
-        }
+        removeIfExpired(key);
         return inner_cache_->get(key);
     }
 
@@ -121,10 +116,11 @@ public:
     size_t size() const override
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        return inner_cache_->size();
-        // Note: this may include entries that are logically expired but
-        // not yet swept — an honest limitation of combining lazy + active
-        // expiry rather than fully synchronous accounting.
+        const auto now = std::chrono::steady_clock::now();
+        size_t expired = 0;
+        for (const auto &kv : expiry_map_)
+            if (now >= kv.second) ++expired;
+        return inner_cache_->size() - expired;
     }
 
     size_t capacity() const override
@@ -147,9 +143,18 @@ public:
     std::vector<std::pair<Key, Value>> getAllEntries() const override
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        // Note: does not filter out entries that are logically expired
-        // but not yet swept — same honest limitation as size().
-        return inner_cache_->getAllEntries();
+        const auto now = std::chrono::steady_clock::now();
+
+        auto all = inner_cache_->getAllEntries();
+        std::vector<std::pair<Key, Value>> live;
+        live.reserve(all.size());
+        for (auto &e : all)
+        {
+            auto it = expiry_map_.find(e.first);
+            if (it == expiry_map_.end() || now < it->second)   // no deadline, or not yet due
+                live.push_back(std::move(e));
+        }
+        return live;
     }
 
     void setStats(const CacheStats &stats) override

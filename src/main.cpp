@@ -64,7 +64,7 @@ std::vector<int> generateZipfianTrace(int num_keys, size_t trace_length, double 
 
 int main()
 {
-    std::cout << "Cachex - Multi-Policy Cache Engine (LRU + LFU)\n";
+    std::cout << "Cachex - Multi-Policy Cache Engine\n";
     std::cout << "============================================\n\n";
 
     // Benchmark parameters

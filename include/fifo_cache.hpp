@@ -39,8 +39,7 @@ public:
         {
             if (cache_map_.size() >= capacity_)
             {
-                // Evict the oldest entry (front of the list, since we
-                // push new entries to the back — see insertion below).
+                // Evict the oldest entry (front of the list, since we push new entries to the back).
                 const auto &oldest = cache_list_.front();
                 if (evictedKey)
                 {

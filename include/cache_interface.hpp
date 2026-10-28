@@ -4,15 +4,6 @@
 #include <cstddef>
 
 /**
- * @brief Represents the available eviction policies for the cache engine.
- */
-enum class EvictionPolicy
-{
-    LRU,
-    LFU
-};
-
-/**
  * @brief Statistics structure for cache performance metrics.
  */
 struct CacheStats
@@ -48,17 +39,6 @@ class ICache
 {
 public:
     virtual ~ICache() = default;
-
-    /**
-     * @brief Inserts or updates a key-value pair in the cache.
-     *
-     * If the cache is at capacity and a new key is inserted, an existing entry
-     * will be evicted according to the cache's policy.
-     *
-     * @param key The key to insert or update.
-     * @param value The value associated with the key.
-     * @return true Always returns true (reserved for future error handling).
-     */
 
     /**
      * @brief Inserts or updates a key-value pair in the cache.

@@ -17,7 +17,14 @@
 
 int main()
 {
-    ix::initNetSystem();
+    // On Windows this calls WSAStartup and can fail; on Linux/macOS it is a
+    // no-op that returns true. Without a working network layer no socket can
+    // be opened, so report the failure and exit instead of continuing.
+    if (!ix::initNetSystem())
+    {
+        std::cerr << "Failed to initialise the network system\n";
+        return 1;
+    }
 
     constexpr size_t kCacheCapacity = 100;
 
