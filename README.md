@@ -319,25 +319,3 @@ WebSocket clients connecting to `ws://localhost:8081` receive a JSON event on ev
 | A stale `cachex_server` is still running after Ctrl+C | `pkill -x cachex_server`, then start it again. |
 
 ---
-
-## Known limitations
-
-- **Policy switch resets TTLs.** Migrated entries are re-inserted with the default 60 s TTL; any custom `?ttl=` and remaining lifetime is not carried over.
-- **LFU counts reset on a policy switch** (by design, see Design Notes), and the visualizer's per-key `freq` label for LFU is set when a key is added and is not refreshed on later reads.
-- **The Catch2 suite covers the four cache policies, not `TTLCacheWrapper`.** TTL expiry and the sweep thread were verified by running the server, not by unit tests.
-- **In-memory only.** There is no persistence, authentication or TLS; this is a local development server.
-- **`size()` and `getAllEntries()` on the TTL wrapper exclude expired-but-not-yet-swept entries**, but the sweep thread only runs every 1000 ms, so an expired key can remain in the inner cache for up to a second.
-
----
-
-## Design Notes
-
-**TTL as a decorator, not a built-in feature.** `TTLCacheWrapper<ICache>` wraps any cache implementation rather than being baked into each policy. Every eviction policy stays focused on its own logic, while TTL support composes on top through the standard `ICache` interface. The wrapper combines lazy expiry (checked on every `get`/`put`) with an active background sweep thread, and notifies the server layer through a callback whenever it reclaims an expired key, so the live visualizer stays accurate even for keys nobody touches again.
-
-**Policy switching migrates data, not metadata (modeled on Redis).** Redis's `CONFIG SET maxmemory-policy` changes the eviction strategy at runtime without clearing the dataset; `POST /policy` does the same. The `ICache` interface exposes `getAllEntries()` and `setStats()` specifically to support this: the server reads every key-value pair and the aggregate stats from the outgoing cache, constructs the new policy's cache, and re-inserts everything. Per-policy metadata is deliberately not preserved: an LFU key's access frequency and an LRU key's recency position have no honest translation into a different policy's bookkeeping. A key that was "hot" under LFU does not start "recent" under LRU for free; it re-earns its position under the new policy's own rules, like every other migrated key.
-
-**MRU's benchmark required real debugging, not just a workload pick.** An early version of the sequential-scan benchmark produced an exact 0.00% hit rate for LRU, LFU and FIFO. That looked like a strong result but was degenerate: at that working-set-to-capacity ratio every policy was *structurally guaranteed* zero reuse, since every key was evicted long before its next scheduled access. A second attempt added randomized re-touches, which fixed the zero-hit-rate problem but accidentally gave LFU an artificial frequency advantage. The final version uses a deterministic, equal-for-every-key sliding-window re-touch, which gives an honest, explainable result: MRU clearly leads at 87.70%, LRU and FIFO are nearly identical (in a purely sequential scan "least recently used" and "oldest inserted" select almost the same keys), and LFU sits close behind them with no accidental frequency signal to exploit.
-
-**Eviction-key reporting.** `ICache::put()` accepts an optional `Key* evictedKey` out-parameter, populated when an insertion causes an eviction. This interface addition supports accurate eviction events in the live event stream; without it the server could only report "an eviction happened", not which key was evicted.
-
-**Thread safety.** The cache implementations themselves are not thread-safe; the server serializes access with a single mutex, and `TTLCacheWrapper` has its own internal mutex so the sweep thread can run safely alongside request handlers.
