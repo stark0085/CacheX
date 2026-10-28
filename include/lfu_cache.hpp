@@ -10,36 +10,6 @@
 template <typename Key, typename Value>
 class LFUCache : public ICache<Key, Value>
 {
-private:
-    struct Node
-    {
-        Value value;
-        size_t freq;
-        typename std::list<Key>::iterator it;
-    };
-
-    size_t capacity_;
-    CacheStats stats_;
-    size_t min_freq_;
-    std::unordered_map<Key, Node> cache_map_;
-    std::unordered_map<size_t, std::list<Key>> freq_list_map_;
-
-    void promote(const Key &key, Node &node)
-    {
-        size_t freq = node.freq;
-        freq_list_map_[freq].erase(node.it);
-        if (freq_list_map_[freq].empty())
-        {
-            freq_list_map_.erase(freq);
-            if (min_freq_ == freq)
-            {
-                min_freq_++;
-            }
-        }
-        node.freq = freq + 1;
-        freq_list_map_[node.freq].push_front(key);
-        node.it = freq_list_map_[node.freq].begin();
-    }
 
 public:
     explicit LFUCache(size_t capacity) : capacity_(capacity), min_freq_(0)
@@ -181,5 +151,36 @@ public:
     void setStats(const CacheStats &stats) override
     {
         stats_ = stats;
+    }
+
+private:
+    struct Node
+    {
+        Value value;
+        size_t freq;
+        typename std::list<Key>::iterator it;
+    };
+
+    size_t capacity_;
+    CacheStats stats_;
+    size_t min_freq_;
+    std::unordered_map<Key, Node> cache_map_;
+    std::unordered_map<size_t, std::list<Key>> freq_list_map_;
+
+    void promote(const Key &key, Node &node)
+    {
+        size_t freq = node.freq;
+        freq_list_map_[freq].erase(node.it);
+        if (freq_list_map_[freq].empty())
+        {
+            freq_list_map_.erase(freq);
+            if (min_freq_ == freq)
+            {
+                min_freq_++;
+            }
+        }
+        node.freq = freq + 1;
+        freq_list_map_[node.freq].push_front(key);
+        node.it = freq_list_map_[node.freq].begin();
     }
 };
